@@ -1,0 +1,4 @@
+INDEX VERSION 1.134+C:\Users\alumnat\Documents\GitHub\ChatSockets2\Servidor\.metadata\.plugins\org.eclipse.jdt.core
+1000169243.index
+1067094681.index
+1865797976.index

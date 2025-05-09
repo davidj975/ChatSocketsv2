@@ -1,0 +1,130 @@
+package servidor;
+
+import java.io.*;
+import java.net.*;
+import java.util.*;
+import java.util.concurrent.*;
+
+public class Servidor {
+    private static volatile boolean servidorActivo = true;
+    private static String keyServidor;
+    private static final List<ClienteHandler> clientesConectados = Collections.synchronizedList(new ArrayList<>());
+
+    public static void main(String[] args) throws IOException {
+        if (args.length < 2) {
+            System.out.println("Uso: java Servidor (MaxC) (keyServidor)");
+            return;
+        }
+
+        int maxClientes = Integer.parseInt(args[0]);
+        keyServidor = args[1];
+        int puerto = 1234;
+
+        ServerSocket serverSocket = new ServerSocket(puerto);
+        System.out.println("Servidor online en " + puerto + ". Esperando gitanos");
+
+        while (servidorActivo) {
+            if (clientesConectados.size() < maxClientes) {
+                Socket clienteSocket = serverSocket.accept();
+                ClienteHandler handler = new ClienteHandler(clienteSocket);
+                clientesConectados.add(handler);
+                new Thread(handler).start();
+                System.out.println("Cliente online. Total: " + clientesConectados.size());
+            }
+        }
+
+        serverSocket.close();
+        System.out.println("Servidor bye <3");
+    }
+
+    private static class ClienteHandler implements Runnable {
+        private Socket socket;
+        private BufferedReader entrada;
+        private PrintWriter salida;
+        private Scanner scanner = new Scanner(System.in);
+        private boolean conectado = true;
+        private String keyCliente;
+
+        public ClienteHandler(Socket socket) {
+            this.socket = socket;
+        }
+
+        @Override
+        public void run() {
+            try {
+                entrada = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                salida = new PrintWriter(socket.getOutputStream(), true);
+
+                salida.println("Introduce key salida:");
+                keyCliente = entrada.readLine();
+
+                Thread hiloLectura = new Thread(() -> {
+                    try {
+                        String mensaje;
+                        while (conectado && (mensaje = entrada.readLine()) != null) {
+                            System.out.println("\nCLIENTE: " + mensaje);
+
+                            if (mensaje.equals(keyCliente)) {
+                                salida.println("Chat cerrado por tu key.");
+                                cerrarConexion();
+                            } else if (mensaje.equals(keyServidor)) {
+                                cerrarTodosLosClientes();
+                                servidorActivo = false;
+                            }
+
+                            System.out.print("Escribe: ");
+                        }
+                    } catch (IOException e) {
+                        System.out.println("ERROR LECTURA CLIENTE.");
+                        cerrarConexion();
+                    }
+                });
+                hiloLectura.start();
+
+                while (conectado && servidorActivo) {
+                    System.out.print("Escribe: ");
+                    String mensaje = scanner.nextLine();
+                    salida.println(mensaje);
+
+                    if (mensaje.equals(keyCliente)) {
+                        salida.println("El admin cerro chat :C.");
+                        cerrarConexion();
+                    } else if (mensaje.equals(keyServidor)) {
+                        salida.println("El admin cerro todos los chats :C.");
+                        cerrarTodosLosClientes();
+                        servidorActivo = false;
+                    }
+                }
+
+            } catch (IOException e) {
+                System.out.println("ERROR CLIENTE.");
+            }
+        }
+
+        private void cerrarConexion() {
+            conectado = false;
+            clientesConectados.remove(this);
+            try {
+                if (entrada != null) entrada.close();
+                if (salida != null) salida.close();
+                if (socket != null && !socket.isClosed()) socket.close();
+            } catch (IOException e) {
+                System.out.println("ERROR CERRAR RECURSOS CLI.");
+            }
+            if (clientesConectados.isEmpty()) {
+                System.out.println("No hay clientes online :C. Bye servidor <3.");
+                servidorActivo = false;
+            }
+        }
+
+        private void cerrarTodosLosClientes() {
+            synchronized (clientesConectados) {
+                for (ClienteHandler c : clientesConectados) {
+                    c.salida.println("Bye servidor <3.");
+                    c.cerrarConexion();
+                }
+                clientesConectados.clear();
+            }
+        }
+    }
+}

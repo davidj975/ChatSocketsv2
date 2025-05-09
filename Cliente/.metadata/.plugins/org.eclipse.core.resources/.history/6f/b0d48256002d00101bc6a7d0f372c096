@@ -1,0 +1,67 @@
+package Cliente;
+
+import java.io.*;
+import java.net.*;
+import java.util.Scanner;
+
+public class Cliente {
+    private static volatile boolean conexionActiva = true;
+
+    public static void main(String[] args) {
+        try {
+            Socket socketCliente = new Socket("localhost", 1234);
+            System.out.println("Conexión server done.");
+
+            BufferedReader lector = new BufferedReader(new InputStreamReader(socketCliente.getInputStream()));
+            PrintWriter escritor = new PrintWriter(socketCliente.getOutputStream(), true);
+            Scanner teclado = new Scanner(System.in);
+
+            System.out.print("Introduce tu clave de salida: ");
+            String claveSalida = teclado.nextLine();
+            escritor.println(claveSalida);
+
+            Thread hiloRecibirMensajes = new Thread(() -> {
+                try {
+                    String mensajeRecibido;
+                    while (conexionActiva && (mensajeRecibido = lector.readLine()) != null) {
+                        System.out.println("\nSERVIDOR: " + mensajeRecibido);
+                        if (mensajeRecibido.contains("cerrado") || mensajeRecibido.contains("servidor")) {
+                            conexionActiva = false;
+                            cerrarConexiones(socketCliente, lector, escritor, teclado);
+                        }
+                        System.out.print("Escribe: ");
+                    }
+                } catch (IOException e) {
+                    System.out.println("Error al recibir el mensaje: " + e.getMessage());
+                }
+            });
+            hiloRecibirMensajes.start();
+
+            while (conexionActiva) {
+                System.out.print("Escribe: ");
+                String mensajeUsuario = teclado.nextLine();
+                escritor.println(mensajeUsuario);
+
+                if (mensajeUsuario.equals(claveSalida)) {
+                    conexionActiva = false;
+                    cerrarConexiones(socketCliente, lector, escritor, teclado);
+                }
+            }
+
+            System.out.println("Chat finalizado.");
+        } catch (IOException e) {
+            System.out.println("Error al conectar con el servidor: " + e.getMessage());
+        }
+    }
+
+    private static void cerrarConexiones(Socket socketCliente, BufferedReader lector, PrintWriter escritor, Scanner teclado) {
+        try {
+            if (lector != null) lector.close();
+            if (escritor != null) escritor.close();
+            if (socketCliente != null && !socketCliente.isClosed()) socketCliente.close();
+            if (teclado != null) teclado.close();
+        } catch (IOException e) {
+            System.out.println("Error al cerrar las conexiones: " + e.getMessage());
+        }
+    }
+}
